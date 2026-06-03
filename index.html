@@ -139,6 +139,8 @@
   .gh-row{display:flex;justify-content:space-between;align-items:center}
   .mini{padding:3px 10px;font-size:11px;margin-left:6px}
   #dev{position:absolute;inset:0;background:rgba(8,13,19,.94);z-index:1400;display:none;align-items:center;justify-content:center;padding:20px}
+  #sync{position:absolute;inset:0;background:rgba(8,13,19,.94);z-index:1450;display:none;align-items:center;justify-content:center;padding:20px}
+  #syncQR img{image-rendering:pixelated;border:6px solid #fff;border-radius:6px}
   .devrow{padding:6px 8px;border-bottom:1px solid var(--line);cursor:pointer;display:flex;justify-content:space-between;gap:12px;align-items:center}
   .devrow:hover{background:var(--panel2)}
   #combo{position:absolute;left:50%;top:80px;transform:translateX(-50%) scale(.8);z-index:1150;
@@ -199,7 +201,7 @@
     #card .desc{font-size:15.5px;line-height:1.6}
     #card #cClose{padding:6px 12px;font-size:18px}
 
-    #setup,#finish,#stats,#dev{padding:14px;align-items:flex-start}
+    #setup,#finish,#stats,#dev,#sync{padding:14px;align-items:flex-start}
     .card{padding:18px 16px;border-radius:16px;max-height:96vh;
       margin-top:env(safe-area-inset-top); margin-bottom:env(safe-area-inset-bottom)}
     .card h2{font-size:19px}
@@ -356,7 +358,8 @@
     <div class="gh" id="stHdr" style="margin-top:12px">Svi vežbani pojmovi</div>
     <div id="stWeak" style="font-size:13px;line-height:1.5;max-height:30vh;overflow:auto;margin-top:6px;padding-right:6px"></div>
     <div class="row" style="justify-content:space-between;margin-top:16px">
-      <button id="btnClearSave" style="border-color:var(--bad);color:var(--bad)">🗑 Obriši sav napredak</button>
+      <button id="btnSync">🔄 Sinhronizacija</button>
+      <button id="btnClearSave" style="border-color:var(--bad);color:var(--bad)">🗑 Obriši</button>
       <button id="btnStatsClose" class="primary">Zatvori</button>
     </div>
   </div>
@@ -375,6 +378,26 @@
   </div>
 </div>
 
+<!-- SYNC -->
+<div id="sync">
+  <div class="card" style="max-width:520px">
+    <button id="syncClose" title="Zatvori" style="position:absolute;top:10px;right:12px;padding:4px 12px;font-size:17px;background:transparent;border-color:transparent;color:var(--muted)">✕</button>
+    <h2>🔄 Sinhronizacija napretka</h2>
+    <p class="sub" style="margin-bottom:8px">Prenesi napredak na drugi uređaj (npr. telefon). Najlakše: izvezi na sajtu, pošalji link/QR sebi, otvori na telefonu.</p>
+    <div class="gh">1. Izvezi sa ovog uređaja</div>
+    <div class="row" style="margin-top:6px"><button id="syncExport" class="primary">Napravi kod / QR</button><button id="syncDownload">⬇ Fajl</button></div>
+    <textarea id="syncCode" readonly placeholder="Klikni „Napravi kod / QR"…" style="width:100%;height:54px;margin-top:8px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font-size:12px;resize:vertical"></textarea>
+    <div class="row"><button id="syncCopyCode">📋 Kopiraj kod</button><button id="syncCopyLink">🔗 Kopiraj link</button></div>
+    <div id="syncQR" style="text-align:center;margin-top:8px"></div>
+    <div id="syncQRnote" class="hint" style="text-align:center"></div>
+    <div class="gh" style="margin-top:14px">2. Uvezi na ovaj uređaj</div>
+    <p class="hint" style="margin-top:4px">Nalepi kod sa drugog uređaja (ili otvori sync-link). Zameniće trenutni napredak.</p>
+    <textarea id="syncIn" placeholder="Nalepi kod ovde…" style="width:100%;height:54px;margin-top:6px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font-size:12px;resize:vertical"></textarea>
+    <div class="row"><button id="syncImport" class="primary">Uvezi kod</button><label class="opt" style="font-size:13px">ili fajl: <input type="file" id="syncFile" accept=".json,.txt"></label></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
@@ -1307,6 +1330,51 @@ function flashCombo(n){
   comboTO=setTimeout(()=>el.classList.remove('show'),1300);
 }
 
+/* ---------- Sinhronizacija (izvoz/uvoz) ---------- */
+const SYNC_BASE = (location.protocol.indexOf('http')===0) ? location.href.split('#')[0] : 'https://lhespov.github.io/GeoKviz/';
+function b64urlEnc(str){ return btoa(unescape(encodeURIComponent(str))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+function b64urlDec(s){ s=s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4)s+='='; return decodeURIComponent(escape(atob(s))); }
+function syncPayload(){ const S=SAVE||blankSave(); return JSON.stringify({v:1,settings:S.settings,stats:S.stats,games:S.games}); }
+function syncLink(){ return SYNC_BASE+'#sync='+(document.getElementById('syncCode').value||''); }
+function openSync(){
+  document.getElementById('syncCode').value=''; document.getElementById('syncIn').value='';
+  document.getElementById('syncQR').innerHTML=''; document.getElementById('syncQRnote').textContent='';
+  document.getElementById('sync').style.display='flex';
+}
+function doExport(){
+  const code=b64urlEnc(syncPayload());
+  document.getElementById('syncCode').value=code;
+  const link=SYNC_BASE+'#sync='+code;
+  const qd=document.getElementById('syncQR'), note=document.getElementById('syncQRnote'); qd.innerHTML='';
+  if(typeof qrcode!=='undefined' && link.length<=1800){
+    try{ const qr=qrcode(0,'L'); qr.addData(link); qr.make(); qd.innerHTML=qr.createImgTag(4,8);
+      note.textContent='Skeniraj QR telefonom — ili pošalji link/kod sebi.'; }
+    catch(e){ note.textContent='Napredak je prevelik za QR — koristi „Kopiraj link" ili kod.'; }
+  } else note.textContent='Napredak je prevelik za QR — koristi „Kopiraj link" ili kod.';
+}
+function copyText(t){
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(()=>alert('Kopirano! 📋'),()=>alert('Kopiraj ručno.')); return; }
+  const ta=document.getElementById('syncCode'); ta.value=t; ta.focus(); ta.select();
+  try{ document.execCommand('copy'); alert('Kopirano! 📋'); }catch(e){ alert('Kopiraj ručno (označeno je).'); }
+}
+function parseSync(text){ text=(text||'').trim(); if(!text) return null;
+  try{ return JSON.parse(text); }catch(e){}
+  try{ return JSON.parse(b64urlDec(text)); }catch(e){} return null; }
+function applyImport(text){
+  const obj=parseSync(text);
+  if(!obj || typeof obj!=='object' || (!obj.stats && !obj.settings && !obj.games)){ alert('Neispravan kod/fajl. Nalepi ceo kod.'); return; }
+  if(!confirm('Uvezi napredak? Ovo će zameniti trenutni napredak na ovom uređaju.')) return;
+  if(!SAVE) SAVE=blankSave();
+  if(obj.settings) SAVE.settings=obj.settings;
+  if(obj.stats) SAVE.stats=obj.stats;
+  if(obj.games) SAVE.games=obj.games;
+  state.saving=true; const os=document.getElementById('optSave'); if(os) os.checked=true; savePref(true);
+  persist();
+  document.getElementById('sync').style.display='none';
+  alert('Napredak je uvezen! ✅');
+  renderSetup();
+}
+
 const REGION_COLORS={sa:'#f59e0b', na:'#38bdf8', au:'#a78bfa'};
 function showCard(f,dist,pts,mode){
   const skipped = mode===true || mode==='skip';
@@ -1451,6 +1519,14 @@ document.getElementById('btnSetupClose').onclick=()=>{ document.getElementById('
 document.getElementById('btnAdaptive').onclick=startAdaptive;
 document.getElementById('btnStats').onclick=openStats;
 document.getElementById('btnStatsClose').onclick=()=>{ document.getElementById('stats').style.display='none'; };
+document.getElementById('btnSync').onclick=openSync;
+document.getElementById('syncClose').onclick=()=>{ document.getElementById('sync').style.display='none'; };
+document.getElementById('syncExport').onclick=doExport;
+document.getElementById('syncCopyCode').onclick=()=>{ const v=document.getElementById('syncCode').value; if(v) copyText(v); };
+document.getElementById('syncCopyLink').onclick=()=>{ if(document.getElementById('syncCode').value) copyText(syncLink()); };
+document.getElementById('syncImport').onclick=()=>applyImport(document.getElementById('syncIn').value);
+document.getElementById('syncDownload').onclick=()=>{ const blob=new Blob([syncPayload()],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='geokviz-napredak.json'; a.click(); };
+document.getElementById('syncFile').onchange=(e)=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>applyImport(r.result); r.readAsText(f); };
 document.getElementById('btnDev').onclick=openDev;
 document.getElementById('devClose').onclick=()=>{ document.getElementById('dev').style.display='none'; };
 document.getElementById('devSearch').oninput=renderDevList;
@@ -1481,6 +1557,11 @@ initMap();
 preprocessGeo();
 initFromSave();
 renderSetup();
+if(location.hash.indexOf('#sync=')===0){               // otvoren sync-link → ponudi uvoz
+  const code=location.hash.slice(6);
+  try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
+  applyImport(code);
+}
 if(isMobile){
   const km=document.getElementById('kmLabel'); if(km) km.textContent='km';
   const hh=document.getElementById('howHint');
