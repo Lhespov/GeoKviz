@@ -838,10 +838,10 @@ function haversine(a1,o1,a2,o2){
   const s=Math.sin(dla/2)**2 + Math.cos(a1*t)*Math.cos(a2*t)*Math.sin(dlo/2)**2;
   return 2*R*Math.asin(Math.min(1,Math.sqrt(s)));
 }
-const MAXPTS=5000;
+const MAXPTS=5000, GENTLE=1.5; // blaži, postepeniji pad poena sa udaljenošću
 function scoreFor(distKm, scale){
-  // 5000 na 0 km, eksponencijalno opada; "veliki" objekti praštaju više
-  return Math.round(MAXPTS*Math.exp(-distKm/scale));
+  // 5000 na 0 km, eksponencijalno ali blago opada; "veliki" objekti praštaju više
+  return Math.round(MAXPTS*Math.exp(-distKm/(scale*GENTLE)));
 }
 function normLng(l){ while(l>180)l-=360; while(l<-180)l+=360; return l; }
 
