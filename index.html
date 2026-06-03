@@ -310,6 +310,10 @@
         <select id="optTimer" style="background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 8px">
           <option value="0" selected>isključen</option><option value="10">10s</option><option value="15">15s</option><option value="20">20s</option><option value="30">30s</option>
         </select></label></div>
+      <div class="row" style="align-items:center"><label class="opt" style="flex:1">🎯 Tolerancija bodovanja
+        <input type="range" id="optSens" min="0.8" max="2.6" step="0.1" value="1.5" style="flex:1;min-width:120px;margin:0 8px">
+        <span id="sensVal" style="min-width:64px;color:var(--text)">srednje</span></label></div>
+      <div class="hint" style="padding:0 14px">Niže = strože (mora preciznije), više = blaže (oprašta veća promašaja).</div>
       <div class="row" style="justify-content:space-between">
         <label class="opt" style="font-size:14px;color:var(--text)"><input type="checkbox" id="optSave" checked> 💾 Čuvaj napredak na uređaju</label>
         <button id="btnStats" style="padding:6px 12px;font-size:13px">📊 Statistika</button></div>
@@ -838,10 +842,10 @@ function haversine(a1,o1,a2,o2){
   const s=Math.sin(dla/2)**2 + Math.cos(a1*t)*Math.cos(a2*t)*Math.sin(dlo/2)**2;
   return 2*R*Math.asin(Math.min(1,Math.sqrt(s)));
 }
-const MAXPTS=5000, GENTLE=1.5; // blaži, postepeniji pad poena sa udaljenošću
+const MAXPTS=5000, GENTLE=1.5; // podrazumevana tolerancija (klizač u meniju je menja)
 function scoreFor(distKm, scale){
-  // 5000 na 0 km, eksponencijalno ali blago opada; "veliki" objekti praštaju više
-  return Math.round(MAXPTS*Math.exp(-distKm/(scale*GENTLE)));
+  // 5000 na 0 km, eksponencijalno opada; veća tolerancija (state.sens) = blaži pad
+  return Math.round(MAXPTS*Math.exp(-distKm/(scale*(state.sens||GENTLE))));
 }
 function normLng(l){ while(l>180)l-=360; while(l<-180)l+=360; return l; }
 
@@ -854,7 +858,7 @@ const state = {
   pool:[], queue:[], idx:-1, current:null,
   totalRounds:0, played:0, score:0, dists:[], guessed:false,
   showEn:true, shuffle:true, roundsLimit:0, learn:false, saving:true, adaptive:false, showCat:false,
-  timer:0, hintUsed:false, combo:0,
+  timer:0, hintUsed:false, combo:0, sens:1.5,
 };
 let timerId=null, timerLeft=0;
 
@@ -891,7 +895,7 @@ function saveSettings(){
   if(!state.saving) return;
   if(!SAVE) SAVE=blankSave();
   SAVE.settings={ regions:[...state.selRegions], cats:[...state.selCats],
-    showEn:state.showEn, shuffle:state.shuffle, learn:state.learn, rounds:state.roundsLimit, showCat:state.showCat, timer:state.timer };
+    showEn:state.showEn, shuffle:state.shuffle, learn:state.learn, rounds:state.roundsLimit, showCat:state.showCat, timer:state.timer, sens:state.sens };
   persist();
 }
 function saveSession(){
@@ -923,6 +927,7 @@ function initFromSave(){
     document.getElementById('optShowCat').checked = st.showCat===true; // podrazumevano isključeno
     if(st.rounds!=null) document.getElementById('optRounds').value=String(st.rounds);
     if(st.timer!=null) document.getElementById('optTimer').value=String(st.timer);
+    if(st.sens!=null){ document.getElementById('optSens').value=String(st.sens); state.sens=st.sens; }
   }
 }
 function resumeSession(){
@@ -1174,6 +1179,7 @@ function startAdaptive(){
   state.showCat=document.getElementById('optShowCat').checked;
   state.roundsLimit=parseInt(document.getElementById('optRounds').value,10);
   state.timer=parseInt(document.getElementById('optTimer').value,10)||0; state.combo=0;
+  state.sens=parseFloat(document.getElementById('optSens').value)||1.5;
   state.saving=document.getElementById('optSave').checked;
   savePref(state.saving); saveSettings();
   let q=adaptivePool();
@@ -1502,6 +1508,7 @@ document.getElementById('btnStart').onclick=()=>{
   state.showCat=document.getElementById('optShowCat').checked;
   state.roundsLimit=parseInt(document.getElementById('optRounds').value,10);
   state.timer=parseInt(document.getElementById('optTimer').value,10)||0;
+  state.sens=parseFloat(document.getElementById('optSens').value)||1.5;
   state.saving=document.getElementById('optSave').checked;
   savePref(state.saving);
   saveSettings();
@@ -1516,6 +1523,9 @@ document.getElementById('catNone').onclick=()=>{ state.selCats=new Set(); refres
 document.getElementById('fAgain').onclick=startGame;
 document.getElementById('fMenu').onclick=()=>{ document.getElementById('finish').style.display='none'; document.getElementById('setup').style.display='flex'; renderSetup(); };
 document.getElementById('optSave').onchange=()=>{ state.saving=document.getElementById('optSave').checked; renderSetup(); };
+function sensLabel(v){ return v<1.2?'strože': v<1.7?'srednje': v<2.2?'blaže':'vrlo blago'; }
+function updateSensLabel(){ const el=document.getElementById('sensVal'); if(el) el.textContent=sensLabel(parseFloat(document.getElementById('optSens').value||'1.5')); }
+document.getElementById('optSens').oninput=updateSensLabel;
 document.getElementById('btnResume').onclick=resumeSession;
 document.getElementById('btnSetupClose').onclick=()=>{ document.getElementById('setup').style.display='none'; };
 document.getElementById('btnAdaptive').onclick=startAdaptive;
@@ -1559,6 +1569,7 @@ initMap();
 preprocessGeo();
 initFromSave();
 renderSetup();
+updateSensLabel();
 if(location.hash.indexOf('#sync=')===0){               // otvoren sync-link → ponudi uvoz
   const code=location.hash.slice(6);
   try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
