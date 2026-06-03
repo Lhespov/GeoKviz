@@ -1078,6 +1078,7 @@ function preprocessGeo(){
   }
 }
 function wrapLng(g,lng){ return (g&&g.wrap&&lng<0)?lng+360:lng; }   // klik u okvir oblika
+function nearLng(refLng,lng){ while(lng-refLng>180) lng-=360; while(lng-refLng<-180) lng+=360; return lng; } // najkraći put po dužini
 function ringContains(lat,lng,ring){            // ray-casting (planarno po lat/lng)
   let inside=false;
   for(let i=0,j=ring.length-1;i<ring.length;j=i++){
@@ -1238,7 +1239,8 @@ function onMapClick(e){
   state.played++; state.score+=pts; state.dists.push(dist);
   if(pts>=3000){ state.combo++; if(state.combo>=2) flashCombo(state.combo); } else state.combo=0;  // niz dobrih pogodaka
 
-  const gdl=wrapLng(geom(f),glng);
+  const ref = res.near ? res.near[1] : wrapLng(geom(f), f.lng);   // referenca: strana objekta
+  const gdl = nearLng(ref, glng);                                  // pomeri pogodak na najkraći put
   guessMarker=L.marker([glat,gdl],{icon:pinIcon('guess',16)}).addTo(map);
   drawReveal(f);
   // konektor do najbližeg dela (osim ako je klik unutar oblasti)
@@ -1248,7 +1250,7 @@ function onMapClick(e){
   lastResult={f,dist,pts,mode:'guess'};
   attachReopen();
   showCard(f,dist,pts,'guess');
-  fitReveal(f,[glat,glng]);
+  fitReveal(f,[glat,gdl]);
   document.getElementById('btnNext').disabled=false;
   document.getElementById('btnSkip').disabled=true;
   updateStats();
